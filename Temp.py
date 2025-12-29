@@ -13,7 +13,7 @@ class multinomial_logistic_regression(BaseEstimator, ClassifierMixin):
 
     def __init__(self, eta=0.1, max_iter=2000, batch_size=None, random_state=None, decay=1e-4,
                  early_stopping=False, patience=30, tol=1e-6, validation_fraction=0.1,
-                 hidden_layers=[100], verbose=0):
+                 hidden_layers=[100], verbose=0, activation_='relu'):
         self.eta = eta
         self.max_iter = max_iter
         self.random_state = random_state
@@ -28,6 +28,7 @@ class multinomial_logistic_regression(BaseEstimator, ClassifierMixin):
         self.weights_ = []
         self.biases_ = []
         self.classes_ = []
+        self.activation_ = activation_
         self.losses = []
         self.val_losses = []
 
@@ -38,6 +39,10 @@ class multinomial_logistic_regression(BaseEstimator, ClassifierMixin):
         # derivative of a with respect to its z (element-wise derivation)
         return a * (1. - a)
 
+    def _relu(self, z):
+        return cp.where(z>0, z,0)
+    def _relu_derivative(self, a):
+        return cp.where(a>0, 1,0)
     def _forward(self, X):
         yhats = [X]
         zs = []
@@ -48,13 +53,16 @@ class multinomial_logistic_regression(BaseEstimator, ClassifierMixin):
 
         for i in range(len(self.weights_) - 1): #n_layers -1
             z = cur @ self.weights_[i] + self.biases_[i]
-            a = self._sigmoid(z) #activation on hidden is just sigmoid
+            if self.activation_ == 'relu':
+                a = self._relu(z)
+            else:
+                a = self._sigmoid(z)
             zs.append(z) #node net input
             yhats.append(a) # node yhat
             cur = a
 
         z_final = cur @ self.weights_[-1] + self.biases_[-1]
-        a_final = self.activation(z_final) #on final layer, activation is softmax
+        a_final = self._activation(z_final) #on final layer, activation is softmax
         zs.append(z_final)
         yhats.append(a_final)
 
@@ -62,17 +70,16 @@ class multinomial_logistic_regression(BaseEstimator, ClassifierMixin):
 
     def fit(self, X, y):
         X, y = check_X_y(X, y)
-
+        X = cp.array(X)
         self.classes_ = unique_labels(y) #sort labels and store indices
         n_classes = len(self.classes_)
         y_mapped = np.searchsorted(self.classes_, y) #map labels lexicographical as indexes
 
         n_samples, n_features = X.shape
         # GPU computations start:
-        X = cp.array(X)
+
         y_enc = self._one_hot(cp.array(y_mapped), len(self.classes_))
         rgen = cp.random.RandomState(self.random_state)
-
         layer_sizes = [n_features] + self.hidden_layers + [n_classes]
 
         # --- Generate w0, b0 ---
@@ -103,6 +110,10 @@ class multinomial_logistic_regression(BaseEstimator, ClassifierMixin):
             X_val = y_val_enc = None
         if self.batch_size is None:
             self.batch_size = 1
+        self.activation_= str.lower(self.activation_)
+
+
+
 
         for epoch in range(self.max_iter):
             idx = rgen.permutation(n_samples).astype(int)
@@ -126,7 +137,11 @@ class multinomial_logistic_regression(BaseEstimator, ClassifierMixin):
                 n_layers = len(self.weights_)
                 for i in range(n_layers - 2, -1, -1): # from N-2 to 0
                     err = d @ self.weights_[i + 1].T # error from this node on the (node output)
-                    d = err * self._sigmoid_derivative(yhats[i + 1]) # element-wise error = err * f'(yhat(outpot))
+                    if self.activation_ =='relu':
+                        fdash =self._relu_derivative(yhats[i + 1])
+                    else:
+                        fdash = self._sigmoid_derivative(yhats[i + 1])
+                    d = err * fdash # element-wise error = err * f'(yhat(outpot))
 
                     dw = yhats[i].T @ d / X_.shape[0]
                     db = d.mean(axis=0)
@@ -195,7 +210,7 @@ class multinomial_logistic_regression(BaseEstimator, ClassifierMixin):
         yhats = self._forward(X)[1] # returns tuple(zs,yhats)
         return cp.asnumpy(yhats[-1])  # get output layer probabilities
 
-    def activation(self, z):
+    def _activation(self, z):
         z_max = cp.max(z, axis=1, keepdims=True)
         exp_z = cp.exp(z - z_max) # z-zmax to regularize softmax large sz.
         sum_exp = cp.sum(exp_z, axis=1, keepdims=True)

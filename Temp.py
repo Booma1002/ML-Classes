@@ -11,9 +11,9 @@ class multinomial_logistic_regression(BaseEstimator, ClassifierMixin):
     supports GPU processing and sklearn API
     '''
 
-    def __init__(self, eta=0.001, max_iter=3000, batch_size=None, random_state=None, decay=1e-4,
+    def __init__(self, eta=0.1, max_iter=2000, batch_size=None, random_state=None, decay=1e-4,
                  early_stopping=False, patience=30, tol=1e-6, validation_fraction=0.1,
-                 hidden_layers=[50, 50], verbose=0):
+                 hidden_layers=[100], verbose=0):
         self.eta = eta
         self.max_iter = max_iter
         self.random_state = random_state

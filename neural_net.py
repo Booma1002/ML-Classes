@@ -309,7 +309,7 @@ class NeuralNetwork(BaseNeuralNet):
         self.biases_ = []
 
         for i in range(self.n_layers_ - 1):
-            if(self.activation == 'relu'):
+            if(self.activation == 'relu' or self.activation == 'leaky_relu'):
                 # He Initialization
                 std = cp.sqrt(2.0 / self.layer_sizes_[i])
             else:

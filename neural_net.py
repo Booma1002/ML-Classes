@@ -32,6 +32,8 @@ class BaseNeuralNet(BaseEstimator, ClassifierMixin):
         self.biases_ = []
         self.losses_ = []
         self.val_losses_ = []
+        self.val_scores_ =[]
+        self.scores_ =[]
         self.best_val_loss_ = float(cp.inf)
         self.epochs_no_improve_ = 0
         self.task = task
@@ -217,7 +219,7 @@ class BaseNeuralNet(BaseEstimator, ClassifierMixin):
             gb = cp.clip(Gb[i], -self.clip_value, self.clip_value)
             self.weights_[i] -= lr * gw
             self.biases_[i] -= lr * gb
-        return self._loss_func(y, acts[-1])
+        return self._loss_func(y, acts[-1]), acts[-1]
 
     def fit(self, XX, yy):
         if self.task == 'classification':
@@ -252,9 +254,10 @@ class BaseNeuralNet(BaseEstimator, ClassifierMixin):
                 r = l + self.batch_size
                 X, y = X_sh[l:r], y_sh[l:r]
 
-                loss = self._process_batch(X, y, epoch)
-
+                loss, pred = self._process_batch(X, y, epoch)
+                score = self._score_metric(y, pred)
             self.losses_.append(loss)
+            self.scores_.append(score)
             if X_val is not None and (epoch % self.val_jump == 0 or epoch == self.max_iter - 1):
                 if self._validate_epoch(X_val, y_val_enc, epoch): break
 
